@@ -533,6 +533,7 @@ service cloud.firestore {
   }
 }</code></pre>
           <p class="text-slate-400">Zwei Collections werden automatisch angelegt sobald Daten kommen: <code class="bg-ocean-950 text-seafoam px-1.5 py-0.5 rounded">gps</code> und <code class="bg-ocean-950 text-seafoam px-1.5 py-0.5 rounded">log</code>.</p>
+          <p class="text-amber-400/80 text-xs mt-2">⚠️ <code>allow write: if true</code> bei <code>gps</code> ist bewusst gesetzt, damit das Apps Script ohne Authentifizierung schreiben kann. Da niemand außer dir die Apps Script URL kennt, ist das akzeptabel — du kannst die Regel später auf IP-Basis einschränken.</p>
         </div>
 
         <!-- Step 3 -->
