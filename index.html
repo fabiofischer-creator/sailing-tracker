@@ -44,6 +44,9 @@
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"></script>
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Firebase SDK (compat — kein Build-Step nötig) -->
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
 
   <style>
     * { box-sizing: border-box; }
@@ -174,7 +177,7 @@
             <span class="text-slate-300 ml-1" x-text="lastUpdate ? formatTime(lastUpdate) : '—'"></span>
           </div>
           <button
-            @click="loadGPSData()"
+            @click="loadGPSFromFirestore()"
             class="flex items-center gap-1.5 text-xs text-seafoam/60 hover:text-seafoam transition-colors"
           >
             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -509,47 +512,62 @@
         <div>
           <h3 class="text-amber-400 font-bold text-base mb-3 flex items-center gap-2">
             <span class="bg-amber-400/20 text-amber-400 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">2</span>
-            Google Sheets für GPS-Daten einrichten
+            Firebase Firestore einrichten (GPS &amp; Tagebuch)
           </h3>
           <ol class="list-decimal list-inside space-y-2 text-slate-300 pl-2">
-            <li>Neues Google Sheet erstellen</li>
-            <li>Erste Zeile (Header) eintragen: <code class="bg-ocean-950 text-seafoam px-1.5 py-0.5 rounded text-xs">timestamp | lat | lng | speed | heading | note</code></li>
-            <li>Unter "Teilen" → "Jeder mit Link kann anzeigen" aktivieren</li>
-            <li>Die <strong>Sheet-ID</strong> aus der URL kopieren:<br>
-                <code class="bg-ocean-950 text-slate-300 px-1.5 py-0.5 rounded text-xs break-all">https://docs.google.com/spreadsheets/d/<span class="text-coral font-bold">DIESE_ID</span>/edit</code></li>
-            <li>In dieser Datei im <code class="bg-ocean-950 text-seafoam px-1.5 py-0.5 rounded">CONFIG</code>-Objekt: <code class="bg-ocean-950 text-seafoam px-1.5 py-0.5 rounded">gpsSheetId: 'DIESE_ID'</code> eintragen</li>
+            <li>Öffne die <a href="https://console.firebase.google.com/project/sailing-tracker-b9acb/firestore" target="_blank" class="text-seafoam underline">Firebase Console → Firestore</a></li>
+            <li>Klicke <strong>"Datenbank erstellen"</strong> → Modus: <strong>Produktionsmodus</strong> → Region wählen (z. B. europe-west1)</li>
+            <li>Unter <strong>Regeln</strong> folgende Regeln einfügen und veröffentlichen:</li>
           </ol>
+          <pre class="bg-ocean-950 rounded-xl p-4 text-xs text-seafoam leading-relaxed my-3"><code>rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /gps/{doc} {
+      allow read: if true;   // öffentlich lesbar
+      allow write: if true;  // Apps Script darf schreiben
+    }
+    match /log/{doc} {
+      allow read:  if true;  // öffentlich lesbar
+      allow write: if false; // nur über Firebase Console
+    }
+  }
+}</code></pre>
+          <p class="text-slate-400">Zwei Collections werden automatisch angelegt sobald Daten kommen: <code class="bg-ocean-950 text-seafoam px-1.5 py-0.5 rounded">gps</code> und <code class="bg-ocean-950 text-seafoam px-1.5 py-0.5 rounded">log</code>.</p>
         </div>
 
         <!-- Step 3 -->
         <div>
           <h3 class="text-amber-400 font-bold text-base mb-3 flex items-center gap-2">
             <span class="bg-amber-400/20 text-amber-400 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">3</span>
-            Google Apps Script — GPS-Empfänger
+            Google Apps Script — GPS direkt in Firestore speichern
           </h3>
-          <p class="text-slate-400 mb-3">Dieses Script empfängt GPS-Daten von GPSLogger und speichert sie im Sheet.</p>
+          <p class="text-slate-400 mb-3">Dieses Script empfängt GPS-Daten von GPSLogger und speichert sie in Firestore (kein Google Sheets nötig).</p>
           <ol class="list-decimal list-inside space-y-2 text-slate-300 mb-4 pl-2">
             <li>Gehe zu <a href="https://script.google.com" target="_blank" class="text-seafoam underline">script.google.com</a> → "Neues Projekt"</li>
             <li>Den folgenden Code einfügen:</li>
           </ol>
-          <pre class="bg-ocean-950 rounded-xl p-4 text-xs text-seafoam leading-relaxed mb-3"><code>function doPost(e) {
-  var ss = SpreadsheetApp.openById('DEINE_SHEET_ID');
-  var sheet = ss.getSheetByName('Tabelle1') || ss.getActiveSheet();
-  var p = e.parameter;
-  var ts = new Date().toISOString();
-  sheet.appendRow([
-    ts,
-    p.latitude  || '',
-    p.longitude || '',
-    p.speed     || '0',
-    p.bearing   || '0',
-    p.note      || ''
-  ]);
-  return ContentService.createTextOutput('OK');
-}
+          <pre class="bg-ocean-950 rounded-xl p-4 text-xs text-seafoam leading-relaxed mb-3"><code>var API_KEY = 'AIzaSyAcAG2xW3urumaNLpsRaLoh7698TMysSqc';
+var PROJECT = 'sailing-tracker-b9acb';
+var FS_URL  = 'https://firestore.googleapis.com/v1/projects/'
+            + PROJECT + '/databases/(default)/documents/gps?key=' + API_KEY;
 
-// Auch GET-Requests annehmen (für einfaches Testen)
-function doGet(e) { return doPost(e); }</code></pre>
+function doPost(e) { return saveGPS(e.parameter); }
+function doGet(e)  { return saveGPS(e.parameter); }
+
+function saveGPS(p) {
+  var body = JSON.stringify({ fields: {
+    timestamp: { stringValue: new Date().toISOString() },
+    lat:       { doubleValue: parseFloat(p.latitude  || '0') },
+    lng:       { doubleValue: parseFloat(p.longitude || '0') },
+    speed:     { doubleValue: parseFloat(p.speed     || '0') },
+    heading:   { doubleValue: parseFloat(p.bearing   || '0') },
+    note:      { stringValue: p.note || '' }
+  }});
+  UrlFetchApp.fetch(FS_URL, {
+    method: 'post', contentType: 'application/json', payload: body
+  });
+  return ContentService.createTextOutput('OK');
+}</code></pre>
           <ol class="list-decimal list-inside space-y-2 text-slate-300 pl-2" start="3">
             <li>Datei speichern → "Bereitstellen" → "Neue Bereitstellung" → Typ: "Web-App"</li>
             <li>Ausführen als: <strong>Ich</strong> | Wer hat Zugriff: <strong>Jeder</strong></li>
@@ -598,33 +616,26 @@ function doGet(e) { return doPost(e); }</code></pre>
         <div>
           <h3 class="text-amber-400 font-bold text-base mb-3 flex items-center gap-2">
             <span class="bg-amber-400/20 text-amber-400 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">6</span>
-            Kapitänstagebuch pflegen
+            Kapitänstagebuch pflegen (Firestore)
           </h3>
           <p class="text-slate-300 mb-3">
-            Erstelle eine Datei namens <code class="bg-ocean-950 text-seafoam px-1.5 py-0.5 rounded">log.json</code> im Repository:
+            Öffne die <a href="https://console.firebase.google.com/project/sailing-tracker-b9acb/firestore" target="_blank" class="text-seafoam underline">Firebase Console → Firestore</a> und füge neue Dokumente in der Collection <code class="bg-ocean-950 text-seafoam px-1.5 py-0.5 rounded">log</code> ein:
           </p>
-          <pre class="bg-ocean-950 rounded-xl p-4 text-xs text-seafoam leading-relaxed"><code>[
-  {
-    "timestamp": "2026-04-10T08:00:00Z",
-    "title": "Abfahrt Antigua!",
-    "position": "17.0°N, 61.8°W",
-    "text": "Wir haben English Harbour verlassen. Wind aus Nordost, alles super!"
-  }
-]</code></pre>
-          <p class="text-slate-400 mt-3">Neue Einträge einfach oben im Array ergänzen und committen. Die Seite lädt automatisch die aktuellste Version.</p>
+          <pre class="bg-ocean-950 rounded-xl p-4 text-xs text-seafoam leading-relaxed"><code>Collection: log
+Dokument-ID: (automatisch)
+Felder:
+  timestamp  (string)  "2026-04-10T08:00:00Z"
+  title      (string)  "Abfahrt Antigua! ⛵"
+  position   (string)  "17.0°N, 61.8°W"
+  text       (string)  "Wir haben English Harbour verlassen..."</code></pre>
+          <p class="text-slate-400 mt-3">Neue Einträge einfach in der Firebase Console hinzufügen — die Seite zeigt sie sofort an.</p>
         </div>
 
         <!-- Step 7: Configure this file -->
         <div class="bg-ocean-900/60 rounded-xl p-5 border border-seafoam/20">
-          <h3 class="text-seafoam font-bold text-base mb-3">🔧 Diese Datei konfigurieren (einmalig)</h3>
-          <p class="text-slate-400 mb-3">Suche im Quellcode nach <code class="bg-ocean-950 text-coral px-1.5 py-0.5 rounded">// === KONFIGURATION ===</code> und trage deine Daten ein:</p>
-          <pre class="bg-ocean-950 rounded-xl p-4 text-xs text-seafoam leading-relaxed"><code>const CONFIG = {
-  gpsSheetId:   'DEINE_GOOGLE_SHEET_ID',   // ← hier eintragen
-  githubUser:   'dein_github_username',      // ← hier eintragen
-  githubRepo:   'sailing-tracker',           // ← Repository-Name
-  updateInterval: 5 * 60 * 1000,            // 5 Minuten (OK lassen)
-  ...
-};</code></pre>
+          <h3 class="text-seafoam font-bold text-base mb-3">🔧 Firebase ist bereits eingebaut ✅</h3>
+          <p class="text-slate-400 mb-3">Firebase und Firestore sind in dieser Datei bereits konfiguriert. Keine weiteren Änderungen im Code nötig — nach Schritt 2 (Firestore erstellen) funktioniert alles automatisch.</p>
+          <p class="text-slate-400">GitHub-Benutzername ist bereits eingestellt: <code class="bg-ocean-950 text-seafoam px-1.5 py-0.5 rounded">fabiofischer-creator</code></p>
         </div>
 
         <!-- Videos optional -->
@@ -653,15 +664,15 @@ function doGet(e) { return doPost(e); }</code></pre>
           Datenquellen &amp; Technische Details
         </summary>
         <div class="mt-3 space-y-1.5 pl-5 border-l border-ocean-700/30 text-xs text-slate-500">
-          <p><span class="text-slate-400">GPS-Daten:</span> GPSLogger App → Google Apps Script → Google Sheets CSV (öffentliches Export)</p>
+          <p><span class="text-slate-400">GPS-Daten:</span> GPSLogger App → Google Apps Script → Firebase Firestore (Echtzeit)</p>
           <p><span class="text-slate-400">Karte:</span>
             <a href="https://carto.com" target="_blank" class="text-seafoam hover:underline">CARTO Dark Matter</a>
             + <a href="https://www.openseamap.org" target="_blank" class="text-seafoam hover:underline">OpenSeaMap</a> Nautik-Overlay
             (Leaflet.js)
           </p>
           <p><span class="text-slate-400">Fotos/Videos:</span> GitHub Contents API (<code>/media</code> Ordner)</p>
-          <p><span class="text-slate-400">Kapitänstagebuch:</span> <code>log.json</code> im GitHub Repository</p>
-          <p><span class="text-slate-400">Aktualisierung:</span> GPS alle 5 Minuten automatisch; Fotos/Log bei jedem Seitenaufruf</p>
+          <p><span class="text-slate-400">Kapitänstagebuch:</span> Firebase Firestore (<code>log</code> Collection)</p>
+          <p><span class="text-slate-400">Aktualisierung:</span> GPS Echtzeit via Firestore onSnapshot; Fotos bei jedem Seitenaufruf</p>
           <p><span class="text-slate-400">Hosting:</span> GitHub Pages (statisch, kostenlos)</p>
           <p class="pt-2 text-slate-600">Erstellt mit ⛵ von Alex @ Plan.Net Studios · 2026</p>
         </div>
@@ -755,7 +766,20 @@ function doGet(e) { return doPost(e); }</code></pre>
   };
 
   // =====================================================
-  // DEMO-DATEN (erscheinen wenn CONFIG noch nicht ausgefüllt ist)
+  // FIREBASE — Echtzeit-Datenbank (Firestore)
+  // API-Key ist für Firebase Web-Apps öffentlich; Sicherheit via Firestore Rules.
+  // =====================================================
+  const db = firebase.firestore(firebase.initializeApp({
+    apiKey:            'AIzaSyAcAG2xW3urumaNLpsRaLoh7698TMysSqc',
+    authDomain:        'sailing-tracker-b9acb.firebaseapp.com',
+    projectId:         'sailing-tracker-b9acb',
+    storageBucket:     'sailing-tracker-b9acb.firebasestorage.app',
+    messagingSenderId: '147414397115',
+    appId:             '1:147414397115:web:9089740a34b83a2ddd799e',
+  }));
+
+  // =====================================================
+  // DEMO-DATEN (erscheinen wenn Firestore-Collections noch leer sind)
   // =====================================================
   const DEMO_TRACK = [
     { timestamp: '2026-04-10T08:00:00Z', lat: 17.0035, lng: -61.7654, speed: 0.0,  heading: 0,   note: '⚓ Abfahrt English Harbour, Antigua' },
@@ -835,23 +859,20 @@ function doGet(e) { return doPost(e); }</code></pre>
 
       // ---------------------------------------------------
       async init() {
-        const configured =
-          CONFIG.gpsSheetId  !== 'YOUR_SHEET_ID' &&
-          CONFIG.githubUser  !== 'YOUR_USERNAME';
+        this.isDemoMode = false;
 
-        this.isDemoMode = !configured;
+        await Promise.all([
+          this.loadGPSFromFirestore(),
+          this.loadLogFromFirestore(),
+          this.loadMedia(),
+        ]);
 
-        if (configured) {
-          await Promise.all([
-            this.loadGPSData(),
-            this.loadLog(),
-            this.loadMedia(),
-          ]);
-        } else {
-          // Demo mode
-          this.track      = DEMO_TRACK;
-          this.logEntries = DEMO_LOG;
-          this.photos     = DEMO_PHOTOS;
+        if (!this.track.length) {
+          // Firestore-Collections noch leer → Demo-Daten anzeigen
+          this.isDemoMode  = true;
+          this.track       = DEMO_TRACK;
+          this.logEntries  = DEMO_LOG;
+          this.photos      = DEMO_PHOTOS;
           this.setCurrentPosition();
         }
 
@@ -861,12 +882,11 @@ function doGet(e) { return doPost(e); }</code></pre>
         this.initMap();
         this.isLoading = false;
 
-        // Load weather after position is known
+        // Wetter laden sobald Position bekannt ist
         this.loadWeather();
 
-        if (configured) {
-          this._pollInterval = setInterval(() => this.loadGPSData(), CONFIG.updateInterval);
-        }
+        // Echtzeit-Listener: aktualisiert Karte bei neuen GPS-Punkten
+        this.listenGPS();
       },
 
       // ---------------------------------------------------
@@ -1093,6 +1113,50 @@ function doGet(e) { return doPost(e); }</code></pre>
           const end   = new Date(this.track[this.track.length - 1].timestamp);
           const days  = (end - start) / (1000 * 60 * 60 * 24);
           this.daysAtSea = days < 1 ? '< 1' : days.toFixed(1);
+        }
+      },
+
+      // ---------------------------------------------------
+      // Firestore: GPS-Track laden
+      async loadGPSFromFirestore() {
+        try {
+          const snap = await db.collection('gps').orderBy('timestamp').get();
+          const rows = snap.docs
+            .map(d => d.data())
+            .filter(p => !isNaN(p.lat) && !isNaN(p.lng));
+          if (rows.length) {
+            this.track = rows;
+            this.setCurrentPosition();
+          }
+        } catch (e) {
+          console.warn('[GPS] Firestore:', e.message);
+        }
+      },
+
+      // Echtzeit-Listener: aktualisiert die Karte sobald ein neuer GPS-Punkt gespeichert wird
+      listenGPS() {
+        db.collection('gps').orderBy('timestamp').onSnapshot(snap => {
+          const rows = snap.docs
+            .map(d => d.data())
+            .filter(p => !isNaN(p.lat) && !isNaN(p.lng));
+          if (!rows.length) return;
+          this.isDemoMode = false;
+          this.track = rows;
+          this.setCurrentPosition();
+          this.updateStats();
+          this.updateMapTrack();
+          this.loadWeather();
+        }, e => console.warn('[GPS] Listener:', e.message));
+      },
+
+      // Firestore: Kapitänstagebuch laden
+      async loadLogFromFirestore() {
+        try {
+          const snap = await db.collection('log').orderBy('timestamp', 'desc').get();
+          const entries = snap.docs.map(d => d.data());
+          if (entries.length) this.logEntries = entries;
+        } catch (e) {
+          console.warn('[Log] Firestore:', e.message);
         }
       },
 
