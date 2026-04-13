@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fábios Segelreise 2026 — Antigua → Bermuda → Rhode Island</title>
+  <meta name="description" content="Live Tracking: Fábios Segelreise von Antigua über Bermuda nach Rhode Island.">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ocean: {
+              950: '#040e1e',
+              900: '#071325',
+              800: '#0c1f3d',
+              700: '#163356',
+              600: '#1e4a7a',
+            },
+            seafoam: '#4ecdc4',
+            coral:   '#e8734a',
+            gold:    '#f4c842',
+          },
+          fontFamily: {
+            serif: ['"Playfair Display"', 'Georgia', 'serif'],
+            sans:  ['Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- Alpine.js -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"></script>
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      background-color: #071325;
+      color: #e2e8f0;
+      font-family: 'Inter', system-ui, sans-serif;
+      margin: 0;
+    }
+
+    /* ---- Map ---- */
+    #sailing-map {
+      height: 56vh;
+      min-height: 380px;
+      max-height: 680px;
+      width: 100%;
+      z-index: 1;
+    }
+
+    /* ---- Boat Marker ---- */
+    .boat-wrap { position: relative; width: 36px; height: 36px; }
+    .boat-pulse {
+      position: absolute; inset: 0;
+      background: #4ecdc4; border-radius: 50%;
+      animation: boatPulse 2.2s ease-in-out infinite;
+    }
+    .boat-icon {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; line-height: 1;
+    }
+    @keyframes boatPulse {
+      0%, 100% { transform: scale(1);   opacity: 0.35; }
+      50%       { transform: scale(1.9); opacity: 0; }
+    }
+
+    /* ---- Leaflet popup dark theme ---- */
+    .leaflet-popup-content-wrapper {
+      background: rgba(12,31,61,0.97);
+      color: #e2e8f0;
+      border: 1px solid #1e4a7a;
+      border-radius: 10px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+    }
+    .leaflet-popup-content { margin: 10px 14px; font-size: 13px; line-height: 1.6; }
+    .leaflet-popup-tip-container { display: none; }
+    .leaflet-popup-close-button { color: #94a3b8 !important; font-size: 18px !important; }
+
+    /* ---- Scrollbar ---- */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #040e1e; }
+    ::-webkit-scrollbar-thumb { background: #163356; border-radius: 3px; }
+
+    /* ---- Progress bar ---- */
+    .progress-fill { transition: width 1.2s ease; }
+
+    /* ---- Photo card hover ---- */
+    .photo-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+    .photo-card:hover {
+      transform: scale(1.04);
+      box-shadow: 0 0 22px rgba(78,205,196,0.28);
+    }
+
+    /* ---- Code blocks in setup guide ---- */
+    pre { overflow-x: auto; white-space: pre; }
+
+    /* ---- Responsive map overlay ---- */
+    @media (max-width: 640px) {
+      #sailing-map { height: 45vh; }
+    }
+  </style>
+</head>
+
+<body
+  x-data="sailTracker()"
+  x-init="init()"
+  class="min-h-screen"
+>
+
+  <!-- ================================================================
+       DEMO MODE BANNER
+       ================================================================ -->
+  <div
+    x-show="isDemoMode"
+    class="sticky top-0 z-50 bg-amber-900/90 backdrop-blur border-b border-amber-600/40
+           text-amber-200 text-center text-sm py-2 px-4"
+  >
+    ⚓ <strong>Demo-Modus</strong> — Beispieldaten. Bitte
+    <button
+      @click="showSetup = !showSetup; $nextTick(() => document.getElementById('setup-section')?.scrollIntoView({behavior:'smooth'}))"
+      class="underline font-semibold ml-1 hover:text-amber-100"
+    >konfigurieren →</button>
+  </div>
+
+  <!-- ================================================================
+       HEADER
+       ================================================================ -->
+  <header class="relative bg-gradient-to-b from-ocean-950 via-ocean-900 to-ocean-900 border-b border-ocean-700/40 overflow-hidden">
+
+    <!-- Subtle wave decoration -->
+    <div class="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-seafoam/30 to-transparent"></div>
+    <div class="absolute inset-0 opacity-[0.03]"
+         style="background: repeating-linear-gradient(90deg, #4ecdc4 0, #4ecdc4 1px, transparent 1px, transparent 60px)">
+    </div>
+
+    <div class="relative max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-5">
+
+        <!-- Title block -->
+        <div>
+          <div class="flex items-center gap-2 text-seafoam/60 text-xs font-semibold tracking-widest uppercase mb-2">
+            <span class="inline-block w-4 h-px bg-seafoam/60"></span>
+            Live Tracking
+            <span class="inline-block w-4 h-px bg-seafoam/60"></span>
+          </div>
+          <h1 class="font-serif text-3xl sm:text-4xl lg:text-5xl text-white font-bold leading-tight">
+            Fábios Segelreise 2026
+          </h1>
+          <!-- Route breadcrumb -->
+          <nav class="flex flex-wrap items-center gap-2 mt-3 text-sm">
+            <span class="flex items-center gap-1.5 bg-gold/10 border border-gold/20 rounded-full px-3 py-1 text-gold font-medium">
+              <span>🏁</span> Antigua
+            </span>
+            <span class="text-ocean-600 text-lg">→</span>
+            <span class="flex items-center gap-1.5 bg-ocean-800/60 border border-ocean-700/40 rounded-full px-3 py-1 text-slate-400">
+              <span>⚓</span> Bermuda
+            </span>
+            <span class="text-ocean-600 text-lg">→</span>
+            <span class="flex items-center gap-1.5 bg-ocean-800/60 border border-ocean-700/40 rounded-full px-3 py-1 text-slate-400">
+              <span>🏆</span> Rhode Island
+            </span>
+          </nav>
+        </div>
+
+        <!-- Status block -->
+        <div class="flex flex-col items-start md:items-end gap-2 shrink-0">
+          <div class="flex items-center gap-2 bg-seafoam/15 border border-seafoam/30 rounded-full px-4 py-1.5">
+            <div class="w-2 h-2 rounded-full animate-pulse"
+                 :class="isDemoMode ? 'bg-amber-400' : 'bg-seafoam'"></div>
+            <span class="text-sm font-semibold" :class="isDemoMode ? 'text-amber-400' : 'text-seafoam'"
+                  x-text="isDemoMode ? 'DEMO-MODUS' : 'LIVE'"></span>
+          </div>
+          <div class="text-slate-400 text-xs text-right">
+            Letztes Update:
+            <span class="text-slate-300 ml-1" x-text="lastUpdate ? formatTime(lastUpdate) : '—'"></span>
+          </div>
+          <button
+            @click="loadGPSData()"
+            class="flex items-center gap-1.5 text-xs text-seafoam/60 hover:text-seafoam transition-colors"
+          >
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Aktualisieren
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </header>
+
+  <!-- ================================================================
+       STATS BAR
+       ================================================================ -->
+  <div class="bg-ocean-800/60 border-b border-ocean-700/30">
+    <div class="max-w-7xl mx-auto">
+
+      <!-- 4 KPI columns -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 divide-x divide-ocean-700/30">
+
+        <div class="px-4 sm:px-6 py-4">
+          <div class="text-[10px] text-slate-500 uppercase tracking-widest font-semibold mb-1">Zurückgelegt</div>
+          <div class="text-2xl font-bold text-white"
+               x-text="totalDistance > 0 ? Math.round(totalDistance) + ' nm' : '—'"></div>
+          <div class="text-xs text-seafoam/70 mt-0.5">von ≈ 1.600 nm</div>
+        </div>
+
+        <div class="px-4 sm:px-6 py-4">
+          <div class="text-[10px] text-slate-500 uppercase tracking-widest font-semibold mb-1">Tage auf See</div>
+          <div class="text-2xl font-bold text-white" x-text="daysAtSea || '—'"></div>
+          <div class="text-xs text-slate-500 mt-0.5">seit Abfahrt</div>
+        </div>
+
+        <div class="px-4 sm:px-6 py-4">
+          <div class="text-[10px] text-slate-500 uppercase tracking-widest font-semibold mb-1">Geschwindigkeit</div>
+          <div class="text-2xl font-bold text-white"
+               x-text="currentSpeed !== null ? Number(currentSpeed).toFixed(1) + ' kn' : '—'"></div>
+          <div class="text-xs text-slate-500 mt-0.5">Aktuelle Fahrt</div>
+        </div>
+
+        <div class="px-4 sm:px-6 py-4">
+          <div class="text-[10px] text-slate-500 uppercase tracking-widest font-semibold mb-1">Kurs</div>
+          <div class="text-2xl font-bold text-white"
+               x-text="currentHeading !== null ? Math.round(currentHeading) + '° ' + headingToCompass(currentHeading) : '—'"></div>
+          <div class="text-xs text-slate-500 mt-0.5">Peilung</div>
+        </div>
+
+      </div>
+
+      <!-- Progress bar -->
+      <div class="px-4 sm:px-6 pb-4">
+        <div class="flex items-center justify-between text-[11px] text-slate-500 mb-1.5">
+          <span>Antigua</span>
+          <span class="text-seafoam font-medium" x-text="getProgressPercent() + '% der Route'"></span>
+          <span>Rhode Island</span>
+        </div>
+        <div class="h-1.5 bg-ocean-700 rounded-full overflow-hidden">
+          <div
+            class="h-full rounded-full progress-fill"
+            style="background: linear-gradient(90deg, #4ecdc4, #e8734a)"
+            :style="'width: ' + getProgressPercent() + '%'"
+          ></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================================================================
+       MAP
+       ================================================================ -->
+  <div class="relative">
+    <div id="sailing-map"></div>
+
+    <!-- Current position overlay (bottom-left of map) -->
+    <div
+      x-show="currentPosition"
+      class="absolute bottom-4 left-4 z-10 max-w-[220px]
+             bg-ocean-900/90 backdrop-blur-sm
+             border border-ocean-600/50 rounded-xl p-3 shadow-xl"
+    >
+      <div class="flex items-center gap-1.5 text-[10px] text-seafoam font-bold uppercase tracking-wider mb-1.5">
+        <div class="w-1.5 h-1.5 bg-seafoam rounded-full animate-pulse"></div>
+        Aktuelle Position
+      </div>
+      <div class="font-mono text-sm text-white">
+        <span x-text="currentPosition ? currentPosition.lat.toFixed(4) + '° N' : ''"></span><br>
+        <span x-text="currentPosition ? Math.abs(currentPosition.lng).toFixed(4) + '° W' : ''"></span>
+      </div>
+      <div class="text-[11px] text-slate-400 mt-1 leading-relaxed"
+           x-text="currentPosition?.note || ''"></div>
+    </div>
+
+    <!-- Map legend (top-right) -->
+    <div class="absolute top-3 right-3 z-10
+                bg-ocean-900/85 backdrop-blur-sm
+                border border-ocean-700/40 rounded-lg p-2.5 text-[11px] text-slate-400">
+      <div class="flex items-center gap-1.5 mb-1">
+        <div class="w-5 h-px border-t-2 border-dashed border-seafoam/50"></div>
+        <span>Geplante Route</span>
+      </div>
+      <div class="flex items-center gap-1.5 mb-1">
+        <div class="w-5 h-0.5 bg-coral rounded"></div>
+        <span>Zurückgelegte Strecke</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <span class="text-base leading-none">⛵</span>
+        <span>Aktuelle Position</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       MAIN CONTENT
+       ================================================================ -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 py-10 space-y-12">
+
+    <!-- ---- Captain's Log ---- -->
+    <section>
+      <h2 class="font-serif text-2xl sm:text-3xl text-white mb-6 flex items-center gap-3">
+        <span class="text-2xl">📋</span>
+        Kapitänstagebuch
+      </h2>
+
+      <template x-if="!logEntries.length">
+        <div class="text-center py-10 bg-ocean-800/20 border border-dashed border-ocean-700/30 rounded-2xl">
+          <div class="text-4xl mb-3">🌊</div>
+          <p class="text-slate-400 text-sm">Noch keine Einträge. Fábio ist gerade auf See!</p>
+        </div>
+      </template>
+
+      <div class="space-y-4">
+        <template x-for="entry in logEntries.slice().reverse()" :key="entry.timestamp">
+          <div class="bg-ocean-800/40 border border-ocean-700/30 rounded-2xl p-5
+                      hover:border-seafoam/20 transition-colors duration-200">
+            <div class="flex flex-wrap items-start justify-between gap-2 mb-3">
+              <h3 class="font-semibold text-white text-base" x-text="entry.title"></h3>
+              <div class="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                <span x-show="entry.position" x-text="entry.position"
+                      class="bg-ocean-700/50 rounded px-2 py-0.5 text-slate-400 font-mono"></span>
+                <span x-text="formatTime(entry.timestamp)"></span>
+              </div>
+            </div>
+            <p class="text-slate-300 text-sm leading-relaxed" x-text="entry.text"></p>
+          </div>
+        </template>
+      </div>
+    </section>
+
+    <!-- ---- Photo Gallery ---- -->
+    <section>
+      <h2 class="font-serif text-2xl sm:text-3xl text-white mb-6 flex items-center gap-3">
+        <span class="text-2xl">📸</span>
+        Fotos &amp; Videos
+      </h2>
+
+      <!-- Loading -->
+      <div x-show="isLoading" class="text-slate-500 text-sm py-4 flex items-center gap-2">
+        <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+        </svg>
+        Lade Medien…
+      </div>
+
+      <!-- Photo grid -->
+      <div x-show="photos.length > 0" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
+        <template x-for="photo in photos" :key="photo.url">
+          <div
+            class="photo-card aspect-square rounded-xl overflow-hidden cursor-pointer relative group bg-ocean-800/50"
+            @click="openPhoto(photo)"
+          >
+            <img
+              :src="photo.url"
+              :alt="photo.caption"
+              class="w-full h-full object-cover"
+              loading="lazy"
+            >
+            <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent
+                        opacity-0 group-hover:opacity-100 transition-opacity duration-200
+                        flex items-end p-2.5">
+              <span class="text-white text-xs font-medium truncate" x-text="photo.caption"></span>
+            </div>
+            <!-- View icon -->
+            <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div class="bg-black/50 rounded-full p-1">
+                <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Empty photos state -->
+      <div
+        x-show="!isLoading && !photos.length && !isDemoMode"
+        class="text-center py-10 bg-ocean-800/20 border border-dashed border-ocean-700/30 rounded-2xl"
+      >
+        <div class="text-4xl mb-3">📷</div>
+        <p class="text-slate-400 text-sm">Noch keine Fotos hochgeladen.</p>
+        <p class="text-slate-500 text-xs mt-1">
+          Lade Bilder in den
+          <code class="text-seafoam bg-ocean-900 px-1.5 py-0.5 rounded">/media</code>
+          Ordner im GitHub Repository.
+        </p>
+      </div>
+
+      <!-- Videos -->
+      <div x-show="videos.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <template x-for="video in videos" :key="video.url">
+          <div class="rounded-xl overflow-hidden bg-ocean-800/40 border border-ocean-700/20">
+            <!-- YouTube embed -->
+            <template x-if="video.url && (video.url.includes('youtube') || video.url.includes('youtu.be'))">
+              <iframe
+                :src="getYoutubeEmbed(video.url)"
+                class="w-full aspect-video"
+                frameborder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowfullscreen
+                loading="lazy"
+              ></iframe>
+            </template>
+            <!-- Direct video file -->
+            <template x-if="video.url && !video.url.includes('youtube') && !video.url.includes('youtu.be')">
+              <video :src="video.url" controls class="w-full aspect-video bg-black" preload="metadata"></video>
+            </template>
+            <div class="px-3 py-2 text-xs text-slate-400" x-text="video.name || video.title || ''"></div>
+          </div>
+        </template>
+      </div>
+    </section>
+
+    <!-- ================================================================
+         SETUP GUIDE
+         ================================================================ -->
+    <section id="setup-section">
+      <button
+        @click="showSetup = !showSetup"
+        class="flex items-center gap-2 text-amber-400 hover:text-amber-300 transition-colors font-medium mb-4"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+        ⚙️ Einrichtungsanleitung
+        <span class="text-xs opacity-60" x-text="showSetup ? '▲ Schließen' : '▼ Öffnen'"></span>
+      </button>
+
+      <div
+        x-show="showSetup"
+        x-transition:enter="transition ease-out duration-200"
+        x-transition:enter-start="opacity-0 -translate-y-2"
+        x-transition:enter-end="opacity-100 translate-y-0"
+        class="bg-ocean-800/40 border border-amber-600/20 rounded-2xl p-6 sm:p-8 space-y-8 text-sm"
+      >
+
+        <!-- Step 1 -->
+        <div>
+          <h3 class="text-amber-400 font-bold text-base mb-3 flex items-center gap-2">
+            <span class="bg-amber-400/20 text-amber-400 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">1</span>
+            GitHub Repository erstellen &amp; Seite hochladen
+          </h3>
+          <ol class="list-decimal list-inside space-y-2 text-slate-300 pl-2">
+            <li>Gehe zu <a href="https://github.com/new" target="_blank" class="text-seafoam underline hover:text-seafoam/80">github.com/new</a> und erstelle ein Repository namens <code class="bg-ocean-950 text-seafoam px-1.5 py-0.5 rounded">sailing-tracker</code></li>
+            <li>Auf <strong>Public</strong> setzen → "Create repository"</li>
+            <li>Diese HTML-Datei (<code class="bg-ocean-950 text-seafoam px-1.5 py-0.5 rounded">sailing-tracker.html</code>) umbenennen in <code class="bg-ocean-950 text-seafoam px-1.5 py-0.5 rounded">index.html</code> und hochladen</li>
+            <li>Einen <code class="bg-ocean-950 text-seafoam px-1.5 py-0.5 rounded">media/</code> Ordner erstellen: "Add file" → "Create new file" → Dateiname: <code class="bg-ocean-950 text-seafoam px-1.5 py-0.5 rounded">media/.gitkeep</code> → Commit</li>
+            <li>Unter <strong>Settings → Pages → Source: "Deploy from branch: main"</strong> aktivieren</li>
+            <li>Deine URL lautet dann: <code class="bg-ocean-950 text-seafoam px-1.5 py-0.5 rounded">https://DEIN_USERNAME.github.io/sailing-tracker</code></li>
+          </ol>
+        </div>
+
+        <!-- Step 2 -->
+        <div>
+          <h3 class="text-amber-400 font-bold text-base mb-3 flex items-center gap-2">
+            <span class="bg-amber-400/20 text-amber-400 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">2</span>
+            Google Sheets für GPS-Daten einrichten
+          </h3>
+          <ol class="list-decimal list-inside space-y-2 text-slate-300 pl-2">
+            <li>Neues Google Sheet erstellen</li>
+            <li>Erste Zeile (Header) eintragen: <code class="bg-ocean-950 text-seafoam px-1.5 py-0.5 rounded text-xs">timestamp | lat | lng | speed | heading | note</code></li>
+            <li>Unter "Teilen" → "Jeder mit Link kann anzeigen" aktivieren</li>
+            <li>Die <strong>Sheet-ID</strong> aus der URL kopieren:<br>
+                <code class="bg-ocean-950 text-slate-300 px-1.5 py-0.5 rounded text-xs break-all">https://docs.google.com/spreadsheets/d/<span class="text-coral font-bold">DIESE_ID</span>/edit</code></li>
+            <li>In dieser Datei im <code class="bg-ocean-950 text-seafoam px-1.5 py-0.5 rounded">CONFIG</code>-Objekt: <code class="bg-ocean-950 text-seafoam px-1.5 py-0.5 rounded">gpsSheetId: 'DIESE_ID'</code> eintragen</li>
+          </ol>
+        </div>
+
+        <!-- Step 3 -->
+        <div>
+          <h3 class="text-amber-400 font-bold text-base mb-3 flex items-center gap-2">
+            <span class="bg-amber-400/20 text-amber-400 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">3</span>
+            Google Apps Script — GPS-Empfänger
+          </h3>
+          <p class="text-slate-400 mb-3">Dieses Script empfängt GPS-Daten von GPSLogger und speichert sie im Sheet.</p>
+          <ol class="list-decimal list-inside space-y-2 text-slate-300 mb-4 pl-2">
+            <li>Gehe zu <a href="https://script.google.com" target="_blank" class="text-seafoam underline">script.google.com</a> → "Neues Projekt"</li>
+            <li>Den folgenden Code einfügen:</li>
+          </ol>
+          <pre class="bg-ocean-950 rounded-xl p-4 text-xs text-seafoam leading-relaxed mb-3"><code>function doPost(e) {
+  var ss = SpreadsheetApp.openById('DEINE_SHEET_ID');
+  var sheet = ss.getSheetByName('Tabelle1') || ss.getActiveSheet();
+  var p = e.parameter;
+  var ts = new Date().toISOString();
+  sheet.appendRow([
+    ts,
+    p.latitude  || '',
+    p.longitude || '',
+    p.speed     || '0',
+    p.bearing   || '0',
+    p.note      || ''
+  ]);
+  return ContentService.createTextOutput('OK');
+}
+
+// Auch GET-Requests annehmen (für einfaches Testen)
+function doGet(e) { return doPost(e); }</code></pre>
+          <ol class="list-decimal list-inside space-y-2 text-slate-300 pl-2" start="3">
+            <li>Datei speichern → "Bereitstellen" → "Neue Bereitstellung" → Typ: "Web-App"</li>
+            <li>Ausführen als: <strong>Ich</strong> | Wer hat Zugriff: <strong>Jeder</strong></li>
+            <li>Bereitstellen → <strong>Script-URL kopieren</strong> (benötigst du im nächsten Schritt)</li>
+          </ol>
+        </div>
+
+        <!-- Step 4 -->
+        <div>
+          <h3 class="text-amber-400 font-bold text-base mb-3 flex items-center gap-2">
+            <span class="bg-amber-400/20 text-amber-400 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">4</span>
+            GPSLogger App konfigurieren
+          </h3>
+          <ol class="list-decimal list-inside space-y-2 text-slate-300 pl-2">
+            <li><a href="https://play.google.com/store/apps/details?id=com.mendhak.gpslogger" target="_blank" class="text-seafoam underline">GPSLogger</a> aus dem Play Store installieren</li>
+            <li>App öffnen → Menü (☰) → <strong>Logging Details</strong> → <strong>Log to custom URL</strong> aktivieren</li>
+            <li>URL eintragen (Script-URL aus Schritt 3 + Parameter):</li>
+          </ol>
+          <pre class="bg-ocean-950 rounded-xl p-4 text-xs text-coral leading-relaxed my-3 break-all"><code>https://script.google.com/macros/s/DEINE_SCRIPT_ID/exec
+  ?latitude=%LAT
+  &longitude=%LON
+  &speed=%SPD
+  &bearing=%DIR
+  &altitude=%ALT</code></pre>
+          <ol class="list-decimal list-inside space-y-2 text-slate-300 pl-2" start="4">
+            <li>Unter <strong>Performance &amp; Accuracy</strong>: Logging-Intervall auf <strong>10–30 Minuten</strong> setzen (spart Starlink-Daten)</li>
+            <li>GPSLogger im Hintergrund laufen lassen — sendet automatisch per Starlink</li>
+          </ol>
+        </div>
+
+        <!-- Step 5 -->
+        <div>
+          <h3 class="text-amber-400 font-bold text-base mb-3 flex items-center gap-2">
+            <span class="bg-amber-400/20 text-amber-400 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">5</span>
+            Fotos hochladen
+          </h3>
+          <p class="text-slate-300 mb-2">
+            Gehe auf deinem Rechner zu:
+            <code class="bg-ocean-950 text-seafoam px-1.5 py-0.5 rounded text-xs">github.com/DEIN_USERNAME/sailing-tracker/upload/main/media</code>
+          </p>
+          <p class="text-slate-400">Einfach Fotos per Drag &amp; Drop hochladen → "Commit changes" → Fertig! 📸<br>
+          Fotos erscheinen automatisch in der Galerie (kein weiteres Update nötig).</p>
+        </div>
+
+        <!-- Step 6 -->
+        <div>
+          <h3 class="text-amber-400 font-bold text-base mb-3 flex items-center gap-2">
+            <span class="bg-amber-400/20 text-amber-400 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">6</span>
+            Kapitänstagebuch pflegen
+          </h3>
+          <p class="text-slate-300 mb-3">
+            Erstelle eine Datei namens <code class="bg-ocean-950 text-seafoam px-1.5 py-0.5 rounded">log.json</code> im Repository:
+          </p>
+          <pre class="bg-ocean-950 rounded-xl p-4 text-xs text-seafoam leading-relaxed"><code>[
+  {
+    "timestamp": "2026-04-10T08:00:00Z",
+    "title": "Abfahrt Antigua!",
+    "position": "17.0°N, 61.8°W",
+    "text": "Wir haben English Harbour verlassen. Wind aus Nordost, alles super!"
+  }
+]</code></pre>
+          <p class="text-slate-400 mt-3">Neue Einträge einfach oben im Array ergänzen und committen. Die Seite lädt automatisch die aktuellste Version.</p>
+        </div>
+
+        <!-- Step 7: Configure this file -->
+        <div class="bg-ocean-900/60 rounded-xl p-5 border border-seafoam/20">
+          <h3 class="text-seafoam font-bold text-base mb-3">🔧 Diese Datei konfigurieren (einmalig)</h3>
+          <p class="text-slate-400 mb-3">Suche im Quellcode nach <code class="bg-ocean-950 text-coral px-1.5 py-0.5 rounded">// === KONFIGURATION ===</code> und trage deine Daten ein:</p>
+          <pre class="bg-ocean-950 rounded-xl p-4 text-xs text-seafoam leading-relaxed"><code>const CONFIG = {
+  gpsSheetId:   'DEINE_GOOGLE_SHEET_ID',   // ← hier eintragen
+  githubUser:   'dein_github_username',      // ← hier eintragen
+  githubRepo:   'sailing-tracker',           // ← Repository-Name
+  updateInterval: 5 * 60 * 1000,            // 5 Minuten (OK lassen)
+  ...
+};</code></pre>
+        </div>
+
+        <!-- Videos optional -->
+        <div>
+          <h3 class="text-amber-400 font-bold text-base mb-2">🎬 Videos (optional)</h3>
+          <p class="text-slate-400 mb-2">Für YouTube-Links: Datei <code class="bg-ocean-950 text-seafoam px-1.5 py-0.5 rounded">videos.json</code> im Repository erstellen:</p>
+          <pre class="bg-ocean-950 rounded-xl p-4 text-xs text-seafoam leading-relaxed"><code>[
+  { "url": "https://youtu.be/DEIN_VIDEO_ID", "title": "Abfahrt Antigua" },
+  { "url": "https://youtu.be/ANDERES_VIDEO",  "title": "Delfine!" }
+]</code></pre>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ================================================================
+         DATA SOURCES FOOTER
+         ================================================================ -->
+    <footer class="border-t border-ocean-700/30 pt-6 pb-8">
+      <details class="group">
+        <summary class="cursor-pointer text-xs text-slate-500 hover:text-slate-400 transition-colors
+                        font-semibold uppercase tracking-wider flex items-center gap-2 mb-0">
+          <svg class="w-3.5 h-3.5 group-open:rotate-90 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+          Datenquellen &amp; Technische Details
+        </summary>
+        <div class="mt-3 space-y-1.5 pl-5 border-l border-ocean-700/30 text-xs text-slate-500">
+          <p><span class="text-slate-400">GPS-Daten:</span> GPSLogger App → Google Apps Script → Google Sheets CSV (öffentliches Export)</p>
+          <p><span class="text-slate-400">Karte:</span>
+            <a href="https://carto.com" target="_blank" class="text-seafoam hover:underline">CARTO Dark Matter</a>
+            + <a href="https://www.openseamap.org" target="_blank" class="text-seafoam hover:underline">OpenSeaMap</a> Nautik-Overlay
+            (Leaflet.js)
+          </p>
+          <p><span class="text-slate-400">Fotos/Videos:</span> GitHub Contents API (<code>/media</code> Ordner)</p>
+          <p><span class="text-slate-400">Kapitänstagebuch:</span> <code>log.json</code> im GitHub Repository</p>
+          <p><span class="text-slate-400">Aktualisierung:</span> GPS alle 5 Minuten automatisch; Fotos/Log bei jedem Seitenaufruf</p>
+          <p><span class="text-slate-400">Hosting:</span> GitHub Pages (statisch, kostenlos)</p>
+          <p class="pt-2 text-slate-600">Erstellt mit ⛵ von Alex @ Plan.Net Studios · 2026</p>
+        </div>
+      </details>
+    </footer>
+
+  </main>
+
+  <!-- ================================================================
+       PHOTO LIGHTBOX
+       ================================================================ -->
+  <div
+    x-show="selectedPhoto"
+    x-transition:enter="transition ease-out duration-200"
+    x-transition:enter-start="opacity-0"
+    x-transition:enter-end="opacity-100"
+    x-transition:leave="transition ease-in duration-150"
+    x-transition:leave-start="opacity-100"
+    x-transition:leave-end="opacity-0"
+    class="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4"
+    @click.self="closePhoto()"
+    @keydown.escape.window="closePhoto()"
+  >
+    <button
+      @click="closePhoto()"
+      class="absolute top-4 right-4 text-white/60 hover:text-white text-3xl leading-none z-10
+             w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition"
+    >✕</button>
+
+    <div class="max-w-5xl max-h-[90vh] w-full flex flex-col items-center gap-4">
+      <img
+        :src="selectedPhoto?.url"
+        :alt="selectedPhoto?.caption"
+        class="max-w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl"
+      >
+      <p class="text-slate-300 text-sm text-center px-4" x-text="selectedPhoto?.caption || ''"></p>
+    </div>
+  </div>
+
+
+  <!-- ================================================================
+       JAVASCRIPT
+       ================================================================ -->
+  <script>
+  // =====================================================
+  // UTILITY FUNCTIONS
+  // =====================================================
+
+  /** Escape HTML special characters to prevent XSS in Leaflet popups */
+  function escHtml(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  /** RFC 4180-compliant CSV line parser — handles quoted fields with embedded commas */
+  function parseCSVLine(line) {
+    const result = [];
+    const re = /(?:^|,)("(?:[^""]|"")*"|[^,]*)/g;
+    let m;
+    while ((m = re.exec(line)) !== null) {
+      let val = m[1];
+      if (val.startsWith('"')) val = val.slice(1, -1).replace(/""/g, '"');
+      result.push(val.trim());
+    }
+    return result;
+  }
+
+  // =====================================================
+  // === KONFIGURATION ===
+  // Trage hier deine Werte ein, nachdem du GitHub und Google eingerichtet hast.
+  // =====================================================
+  const CONFIG = {
+    // Google Sheets ID (aus der Sheet-URL: /spreadsheets/d/DIESE_ID/edit)
+    gpsSheetId: 'YOUR_SHEET_ID',
+
+    // GitHub Benutzername und Repository-Name
+    githubUser: 'YOUR_USERNAME',
+    githubRepo: 'sailing-tracker',
+
+    // Auto-Refresh Intervall für GPS (5 Minuten empfohlen)
+    updateInterval: 5 * 60 * 1000,
+
+    // === Route-Koordinaten (nur ändern wenn nötig) ===
+    antigua:     { lat: 17.0035, lng: -61.7654, name: 'English Harbour, Antigua' },
+    bermuda:     { lat: 32.2969, lng: -64.7838, name: 'Hamilton, Bermuda' },
+    rhodeIsland: { lat: 41.4901, lng: -71.3128, name: 'Newport, Rhode Island' },
+  };
+
+  // =====================================================
+  // DEMO-DATEN (erscheinen wenn CONFIG noch nicht ausgefüllt ist)
+  // =====================================================
+  const DEMO_TRACK = [
+    { timestamp: '2026-04-10T08:00:00Z', lat: 17.0035, lng: -61.7654, speed: 0.0,  heading: 0,   note: '⚓ Abfahrt English Harbour, Antigua' },
+    { timestamp: '2026-04-10T15:00:00Z', lat: 17.90,   lng: -62.50,   speed: 6.5,  heading: 350, note: '' },
+    { timestamp: '2026-04-10T22:00:00Z', lat: 18.82,   lng: -63.15,   speed: 7.2,  heading: 5,   note: '🌊 Schöner Passatwind, 18 Knoten' },
+    { timestamp: '2026-04-11T05:00:00Z', lat: 19.71,   lng: -63.52,   speed: 6.8,  heading: 358, note: '' },
+    { timestamp: '2026-04-11T12:00:00Z', lat: 20.63,   lng: -63.88,   speed: 7.5,  heading: 2,   note: '' },
+    { timestamp: '2026-04-11T19:00:00Z', lat: 21.55,   lng: -64.10,   speed: 6.2,  heading: 8,   note: '🌅 Wunderschöner Sonnenuntergang' },
+    { timestamp: '2026-04-12T02:00:00Z', lat: 22.40,   lng: -64.25,   speed: 5.9,  heading: 355, note: '' },
+    { timestamp: '2026-04-12T09:00:00Z', lat: 23.28,   lng: -64.40,   speed: 6.7,  heading: 3,   note: '🐬 Delfine!' },
+    { timestamp: '2026-04-12T16:00:00Z', lat: 24.15,   lng: -64.50,   speed: 7.0,  heading: 358, note: '' },
+    { timestamp: '2026-04-12T23:00:00Z', lat: 25.02,   lng: -64.58,   speed: 5.8,  heading: 2,   note: '' },
+    { timestamp: '2026-04-13T10:30:00Z', lat: 25.92,   lng: -64.65,   speed: 6.3,  heading: 12,  note: '☀️ Alles super — Kurs auf Bermuda!' },
+  ];
+
+  const DEMO_LOG = [
+    {
+      timestamp: '2026-04-13T10:30:00Z',
+      title: 'Tag 3 — Auf Kurs! 🎉',
+      position: '25.9°N, 64.7°W',
+      text: 'Guten Morgen aus dem Atlantik! Über 570 Seemeilen sind wir jetzt unterwegs. Wind NNO mit ca. 17 Knoten — perfekte Bedingungen. Das Starlink-System läuft einwandfrei, Familie grüßt herzlich. Bermuda noch ca. 370 nm vor uns. An Bord alles bestens!'
+    },
+    {
+      timestamp: '2026-04-11T19:00:00Z',
+      title: 'Tag 1 — Abfahrt Antigua! ⛵',
+      position: '21.6°N, 64.1°W',
+      text: 'Wir haben heute Morgen English Harbour verlassen. Absolute Traumbedingungen — Passatwind, Sonnenschein, ruhige See. Die erste Nacht auf See war ein Erlebnis: Sternenhimmel wie noch nie gesehen. Delfine haben uns beim Start begleitet. Alle Systeme laufen perfekt.'
+    },
+  ];
+
+  const DEMO_PHOTOS = [
+    { url: 'https://images.unsplash.com/photo-1540946485063-a40da27545f8?w=600&q=80', caption: 'Abfahrt English Harbour, Antigua' },
+    { url: 'https://images.unsplash.com/photo-1504202644028-8c0bf3ce9b42?w=600&q=80', caption: 'Auf dem Atlantik' },
+    { url: 'https://images.unsplash.com/photo-1464122370680-f0b85b8d1aee?w=600&q=80', caption: 'Sonnenuntergang Tag 1' },
+    { url: 'https://images.unsplash.com/photo-1567899381664-e4e5d5a63d5e?w=600&q=80', caption: 'An Bord' },
+    { url: 'https://images.unsplash.com/photo-1534180477871-5d6cc81f3920?w=600&q=80', caption: 'Sternenhimmel' },
+    { url: 'https://images.unsplash.com/photo-1596464716127-f2a82984de30?w=600&q=80', caption: 'Delfine am Bug!' },
+  ];
+
+  // =====================================================
+  // ALPINE.JS KOMPONENTE
+  // =====================================================
+  function sailTracker() {
+    return {
+      // State
+      isDemoMode:    true,
+      isLoading:     true,
+      showSetup:     false,
+
+      // GPS data
+      track:          [],
+      currentPosition: null,
+      lastUpdate:      null,
+      totalDistance:   0,
+      daysAtSea:       0,
+      currentSpeed:    null,
+      currentHeading:  null,
+
+      // Content
+      logEntries: [],
+      photos:     [],
+      videos:     [],
+
+      // Lightbox
+      selectedPhoto: null,
+
+      // Leaflet instances (not reactive)
+      _map:           null,
+      _trackLine:     null,
+      _boatMarker:    null,
+      _waypointLayer: null,
+      _pollInterval:  null,
+
+      // ---------------------------------------------------
+      async init() {
+        const configured =
+          CONFIG.gpsSheetId  !== 'YOUR_SHEET_ID' &&
+          CONFIG.githubUser  !== 'YOUR_USERNAME';
+
+        this.isDemoMode = !configured;
+
+        if (configured) {
+          await Promise.all([
+            this.loadGPSData(),
+            this.loadLog(),
+            this.loadMedia(),
+          ]);
+        } else {
+          // Demo mode
+          this.track      = DEMO_TRACK;
+          this.logEntries = DEMO_LOG;
+          this.photos     = DEMO_PHOTOS;
+          this.setCurrentPosition();
+        }
+
+        this.updateStats();
+
+        await this.$nextTick();
+        this.initMap();
+        this.isLoading = false;
+
+        if (configured) {
+          this._pollInterval = setInterval(() => this.loadGPSData(), CONFIG.updateInterval);
+        }
+      },
+
+      // ---------------------------------------------------
+      initMap() {
+        if (this._map) return;
+
+        const map = L.map('sailing-map', {
+          center: [27, -64],
+          zoom:   5,
+          zoomControl: true,
+          attributionControl: true,
+        });
+
+        // Base layer: CARTO Dark Matter
+        L.tileLayer(
+          'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+          {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            subdomains: 'abcd',
+            maxZoom: 19,
+          }
+        ).addTo(map);
+
+        // Nautical overlay: OpenSeaMap
+        L.tileLayer(
+          'https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
+          {
+            attribution: '&copy; <a href="http://www.openseamap.org">OpenSeaMap</a> contributors',
+            maxZoom: 18,
+            opacity: 0.65,
+          }
+        ).addTo(map);
+
+        this._map = map;
+        this.drawPlannedRoute();
+        this.updateMapTrack();
+      },
+
+      // Draw the dashed planned-route line + port markers
+      drawPlannedRoute() {
+        const map = this._map;
+        if (!map) return;
+
+        const waypoints = [
+          [CONFIG.antigua.lat,     CONFIG.antigua.lng],
+          [CONFIG.bermuda.lat,     CONFIG.bermuda.lng],
+          [CONFIG.rhodeIsland.lat, CONFIG.rhodeIsland.lng],
+        ];
+
+        L.polyline(waypoints, {
+          color: '#4ecdc4',
+          weight: 2,
+          opacity: 0.3,
+          dashArray: '8 14',
+        }).addTo(map);
+
+        const ports = [
+          { ...CONFIG.antigua,     icon: '🏁', label: 'Start — Antigua' },
+          { ...CONFIG.bermuda,     icon: '⚓', label: 'Stopp — Bermuda' },
+          { ...CONFIG.rhodeIsland, icon: '🏆', label: 'Ziel — Rhode Island' },
+        ];
+
+        ports.forEach(port => {
+          const divIcon = L.divIcon({
+            className: '',
+            html: `
+              <div style="position:relative; display:flex; align-items:center;">
+                <div style="
+                  width:13px; height:13px;
+                  background:#f4c842; border-radius:50%;
+                  border:2px solid rgba(255,255,255,0.8);
+                  box-shadow:0 0 8px rgba(244,200,66,0.6);
+                "></div>
+                <div style="
+                  position:absolute; left:18px; top:-8px;
+                  background:rgba(4,14,30,0.92); color:#f4c842;
+                  font-size:11px; font-weight:600; font-family:Inter,sans-serif;
+                  white-space:nowrap; padding:3px 8px; border-radius:6px;
+                  border:1px solid rgba(244,200,66,0.25); line-height:1.5;
+                ">
+                  ${port.icon} ${port.label}
+                </div>
+              </div>`,
+            iconAnchor: [6, 6],
+          });
+          L.marker([port.lat, port.lng], { icon: divIcon }).addTo(map);
+        });
+      },
+
+      // Update the actual GPS track on the map
+      updateMapTrack() {
+        const map = this._map;
+        if (!map || !this.track.length) return;
+
+        const points = this.track.map(p => [p.lat, p.lng]);
+
+        // Draw/redraw track line
+        if (this._trackLine) map.removeLayer(this._trackLine);
+        this._trackLine = L.polyline(points, {
+          color:   '#e8734a',
+          weight:  3.5,
+          opacity: 0.9,
+        }).addTo(map);
+
+        // Waypoint dots — rebuild as a fresh LayerGroup each time (prevents accumulation)
+        if (this._waypointLayer) map.removeLayer(this._waypointLayer);
+        this._waypointLayer = L.layerGroup().addTo(map);
+
+        this.track.forEach((p, i) => {
+          if (i === 0 || i === this.track.length - 1) return;
+          if (i % 3 !== 0) return;
+          const dot = L.circleMarker([p.lat, p.lng], {
+            radius:      3.5,
+            fillColor:   '#e8734a',
+            color:       'rgba(255,255,255,0.5)',
+            weight:      1,
+            fillOpacity: 0.85,
+          }).addTo(this._waypointLayer);
+          if (p.note) {
+            // escHtml() prevents XSS from GPS note fields (user-supplied via Google Sheets)
+            dot.bindPopup(`
+              <div style="font-family:Inter,sans-serif">
+                <span style="color:#94a3b8;font-size:11px">${this.formatTime(p.timestamp)}</span><br>
+                ${escHtml(p.note)}
+              </div>
+            `);
+          }
+        });
+
+        // Animated boat at last position
+        const last = this.track[this.track.length - 1];
+        if (last) {
+          if (this._boatMarker) map.removeLayer(this._boatMarker);
+
+          const boatIcon = L.divIcon({
+            className: '',
+            html: `<div class="boat-wrap">
+              <div class="boat-pulse"></div>
+              <div class="boat-icon">⛵</div>
+            </div>`,
+            iconAnchor: [18, 18],
+            iconSize: [36, 36],
+          });
+
+          this._boatMarker = L.marker([last.lat, last.lng], { icon: boatIcon })
+            .bindPopup(`
+              <div style="font-family:Inter,sans-serif">
+                <div style="color:#4ecdc4;font-weight:700;margin-bottom:6px">⛵ Aktuelle Position</div>
+                <div style="font-family:monospace;color:#e2e8f0">
+                  ${last.lat.toFixed(4)}° N<br>
+                  ${Math.abs(last.lng).toFixed(4)}° W
+                </div>
+                <div style="color:#94a3b8;font-size:11px;margin-top:4px">${this.formatTime(last.timestamp)}</div>
+                ${last.speed ? `<div style="margin-top:3px">Fahrt: <strong>${Number(last.speed).toFixed(1)} kn</strong></div>` : ''}
+                ${last.note ? `<div style="margin-top:4px;font-style:italic;color:#cbd5e1">${escHtml(last.note)}</div>` : ''}
+              </div>
+            `)
+            .addTo(map)
+            .openPopup();
+        }
+      },
+
+      // ---------------------------------------------------
+      async loadGPSData() {
+        const url = `https://docs.google.com/spreadsheets/d/${CONFIG.gpsSheetId}/export?format=csv&gid=0`;
+        try {
+          const r = await fetch(url);
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const csv = await r.text();
+          this.parseCSV(csv);
+          this.updateMapTrack();
+          this.updateStats();
+        } catch (e) {
+          console.warn('[GPS] Fetch failed:', e.message);
+        }
+      },
+
+      parseCSV(csv) {
+        const lines = csv.split('\n').filter(l => l.trim());
+        if (lines.length < 2) return;
+
+        const rows = lines.slice(1).map(line => {
+          // RFC 4180-compliant CSV split — handles quoted fields with embedded commas
+          const cols = parseCSVLine(line);
+          return {
+            timestamp: cols[0] || '',
+            lat:       parseFloat(cols[1]),
+            lng:       parseFloat(cols[2]),
+            speed:     parseFloat(cols[3]) || 0,
+            heading:   parseFloat(cols[4]) || 0,
+            note:      cols[5] || '',
+          };
+        }).filter(p => !isNaN(p.lat) && !isNaN(p.lng));
+
+        if (rows.length) {
+          this.track = rows;
+          this.setCurrentPosition();
+        }
+      },
+
+      setCurrentPosition() {
+        if (!this.track.length) return;
+        const last = this.track[this.track.length - 1];
+        this.currentPosition = last;
+        this.currentSpeed    = last.speed;
+        this.currentHeading  = last.heading;
+        this.lastUpdate      = last.timestamp;
+      },
+
+      updateStats() {
+        // Total distance (Haversine)
+        let dist = 0;
+        for (let i = 1; i < this.track.length; i++) {
+          dist += this.haversine(
+            this.track[i-1].lat, this.track[i-1].lng,
+            this.track[i].lat,   this.track[i].lng
+          );
+        }
+        this.totalDistance = dist;
+
+        // Days at sea
+        if (this.track.length >= 2) {
+          const start = new Date(this.track[0].timestamp);
+          const end   = new Date(this.track[this.track.length - 1].timestamp);
+          const days  = (end - start) / (1000 * 60 * 60 * 24);
+          this.daysAtSea = days < 1 ? '< 1' : days.toFixed(1);
+        }
+      },
+
+      // ---------------------------------------------------
+      async loadMedia() {
+        if (CONFIG.githubUser === 'YOUR_USERNAME') {
+          this.photos = DEMO_PHOTOS;
+          return;
+        }
+
+        const apiUrl = `https://api.github.com/repos/${CONFIG.githubUser}/${CONFIG.githubRepo}/contents/media`;
+        try {
+          const r = await fetch(apiUrl, { headers: { Accept: 'application/vnd.github.v3+json' } });
+          if (!r.ok) throw new Error(`GitHub API: ${r.status}`);
+          const files = await r.json();
+
+          if (Array.isArray(files)) {
+            this.photos = files
+              .filter(f => /\.(jpe?g|png|gif|webp)$/i.test(f.name))
+              .map(f => ({
+                url:     f.download_url,
+                caption: f.name.replace(/\.\w+$/, '').replace(/[-_]/g, ' '),
+              }));
+
+            this.videos = files
+              .filter(f => /\.(mp4|mov|webm)$/i.test(f.name))
+              .map(f => ({ url: f.download_url, name: f.name }));
+          }
+        } catch (e) {
+          console.warn('[Media] GitHub API failed:', e.message);
+          this.photos = DEMO_PHOTOS;
+        }
+
+        // Load videos.json for external (YouTube) links
+        try {
+          const vr = await fetch(
+            `https://raw.githubusercontent.com/${CONFIG.githubUser}/${CONFIG.githubRepo}/main/videos.json`
+          );
+          if (vr.ok) {
+            const ext = await vr.json();
+            this.videos = [...this.videos, ...ext];
+          }
+        } catch (e) { /* videos.json is optional */ }
+      },
+
+      async loadLog() {
+        if (CONFIG.githubUser === 'YOUR_USERNAME') {
+          this.logEntries = DEMO_LOG;
+          return;
+        }
+        try {
+          const r = await fetch(
+            `https://raw.githubusercontent.com/${CONFIG.githubUser}/${CONFIG.githubRepo}/main/log.json`
+          );
+          this.logEntries = r.ok ? await r.json() : DEMO_LOG;
+        } catch (e) {
+          this.logEntries = DEMO_LOG;
+        }
+      },
+
+      // ---------------------------------------------------
+      // Utilities
+      haversine(lat1, lon1, lat2, lon2) {
+        const R  = 3440.065; // nautical miles
+        const φ1 = lat1 * Math.PI / 180;
+        const φ2 = lat2 * Math.PI / 180;
+        const Δφ = (lat2 - lat1) * Math.PI / 180;
+        const Δλ = (lon2 - lon1) * Math.PI / 180;
+        const a  = Math.sin(Δφ/2)**2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2)**2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      },
+
+      formatTime(ts) {
+        if (!ts) return '—';
+        try {
+          return new Date(ts).toLocaleString('de-DE', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit',
+            timeZone: 'UTC',
+          }) + ' UTC';
+        } catch (e) { return ts; }
+      },
+
+      headingToCompass(deg) {
+        if (deg == null || isNaN(deg)) return '';
+        const dirs = ['N','NNO','NO','ONO','O','OSO','SO','SSO','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+        return dirs[Math.round(deg / 22.5) % 16];
+      },
+
+      getProgressPercent() {
+        if (!this.totalDistance) return 0;
+        return Math.min(100, parseFloat((this.totalDistance / 1600 * 100).toFixed(1)));
+      },
+
+      getYoutubeEmbed(url) {
+        let id = '';
+        if      (url.includes('youtu.be/'))  id = url.split('youtu.be/')[1]?.split('?')[0];
+        else if (url.includes('/shorts/'))   id = url.split('/shorts/')[1]?.split('?')[0];
+        else if (url.includes('/live/'))     id = url.split('/live/')[1]?.split('?')[0];
+        else if (url.includes('v='))         id = url.split('v=')[1]?.split('&')[0];
+        return id ? `https://www.youtube.com/embed/${id}?rel=0` : url;
+      },
+
+      openPhoto(photo)  { this.selectedPhoto = photo; },
+      closePhoto()      { this.selectedPhoto = null;  },
+    };
+  }
+  </script>
+
+<footer style="position:fixed;bottom:0;right:0;padding:8px 16px;font-size:11px;color:#999;z-index:9999;background:rgba(255,255,255,0.85);"><a href="https://www.sokosumi.com/de/imprint" style="color:#999;text-decoration:none;">Imprint</a><span style="margin:0 4px;">&middot;</span><a href="https://www.sokosumi.com/de/privacy-policy" style="color:#999;text-decoration:none;">Privacy Policy</a><span style="margin:0 4px;">&middot;</span><a href="https://www.sokosumi.com/de/terms-of-service" style="color:#999;text-decoration:none;">Terms of Use</a></footer></body>
+</html>
