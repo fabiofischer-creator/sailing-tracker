@@ -1,0 +1,12 @@
+{
+  "name": "sailing-tracker",
+  "version": "1.0.0",
+  "description": "Fábios Segelreise 2026 — Antigua → Bermuda → Rhode Island",
+  "scripts": {
+    "predeploy": "echo 'Deploying to GitHub Pages...'",
+    "deploy": "gh-pages -d ."
+  },
+  "devDependencies": {
+    "gh-pages": "^6.3.0"
+  }
+}
