@@ -124,21 +124,6 @@
 >
 
   <!-- ================================================================
-       DEMO MODE BANNER
-       ================================================================ -->
-  <div
-    x-show="isDemoMode"
-    class="sticky top-0 z-50 bg-amber-900/90 backdrop-blur border-b border-amber-600/40
-           text-amber-200 text-center text-sm py-2 px-4"
-  >
-    ⚓ <strong>Demo-Modus</strong> — Beispieldaten. Bitte
-    <button
-      @click="showSetup = !showSetup; $nextTick(() => document.getElementById('setup-section')?.scrollIntoView({behavior:'smooth'}))"
-      class="underline font-semibold ml-1 hover:text-amber-100"
-    >konfigurieren →</button>
-  </div>
-
-  <!-- ================================================================
        HEADER
        ================================================================ -->
   <header class="relative bg-gradient-to-b from-ocean-950 via-ocean-900 to-ocean-900 border-b border-ocean-700/40 overflow-hidden">
@@ -181,10 +166,8 @@
         <!-- Status block -->
         <div class="flex flex-col items-start md:items-end gap-2 shrink-0">
           <div class="flex items-center gap-2 bg-seafoam/15 border border-seafoam/30 rounded-full px-4 py-1.5">
-            <div class="w-2 h-2 rounded-full animate-pulse"
-                 :class="isDemoMode ? 'bg-amber-400' : 'bg-seafoam'"></div>
-            <span class="text-sm font-semibold" :class="isDemoMode ? 'text-amber-400' : 'text-seafoam'"
-                  x-text="isDemoMode ? 'DEMO-MODUS' : 'LIVE'"></span>
+            <div class="w-2 h-2 rounded-full animate-pulse bg-seafoam"></div>
+            <span class="text-sm font-semibold text-seafoam">LIVE</span>
           </div>
           <div class="text-slate-400 text-xs text-right">
             Letztes Update:
@@ -311,6 +294,57 @@
        MAIN CONTENT
        ================================================================ -->
   <main class="max-w-7xl mx-auto px-4 sm:px-6 py-10 space-y-12">
+
+    <!-- ---- Weather Widget ---- -->
+    <section x-show="weather || weatherLoading">
+      <h2 class="font-serif text-2xl sm:text-3xl text-white mb-6 flex items-center gap-3">
+        <span class="text-2xl">🌤</span>
+        Wetter an Bord
+      </h2>
+
+      <div x-show="weatherLoading" class="text-slate-500 text-sm py-4 flex items-center gap-2">
+        <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+        </svg>
+        Lade Wetterdaten…
+      </div>
+
+      <div x-show="weather && !weatherLoading"
+           class="bg-ocean-800/40 border border-ocean-700/30 rounded-2xl p-5">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+
+          <div class="flex flex-col items-center text-center p-3 bg-ocean-900/40 rounded-xl">
+            <div class="text-3xl mb-2" x-text="weather ? weatherIcon(weather.weatherCode) : '🌤'"></div>
+            <div class="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Bedingungen</div>
+            <div class="text-sm text-white font-medium mt-1" x-text="weather ? weatherDesc(weather.weatherCode) : '—'"></div>
+          </div>
+
+          <div class="flex flex-col items-center text-center p-3 bg-ocean-900/40 rounded-xl">
+            <div class="text-3xl mb-2">🌡</div>
+            <div class="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Temperatur</div>
+            <div class="text-2xl font-bold text-white mt-1" x-text="weather ? weather.temp + '°C' : '—'"></div>
+          </div>
+
+          <div class="flex flex-col items-center text-center p-3 bg-ocean-900/40 rounded-xl">
+            <div class="text-3xl mb-2">💨</div>
+            <div class="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Wind</div>
+            <div class="text-2xl font-bold text-white mt-1" x-text="weather ? weather.windSpeed + ' kn' : '—'"></div>
+            <div class="text-xs text-slate-400" x-text="weather ? headingToCompass(weather.windDir) : ''"></div>
+          </div>
+
+          <div class="flex flex-col items-center text-center p-3 bg-ocean-900/40 rounded-xl">
+            <div class="text-3xl mb-2">🌊</div>
+            <div class="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Wellenhöhe</div>
+            <div class="text-2xl font-bold text-white mt-1" x-text="weather ? weather.waveHeight + ' m' : '—'"></div>
+          </div>
+
+        </div>
+        <div class="text-[11px] text-slate-600 mt-3 text-right"
+             x-text="weather ? 'Quelle: Open-Meteo · Position: ' + (currentPosition ? currentPosition.lat.toFixed(2) + '°N, ' + Math.abs(currentPosition.lng).toFixed(2) + '°W' : '') : ''">
+        </div>
+      </div>
+    </section>
 
     <!-- ---- Captain's Log ---- -->
     <section>
@@ -708,7 +742,7 @@ function doGet(e) { return doPost(e); }</code></pre>
     gpsSheetId: 'YOUR_SHEET_ID',
 
     // GitHub Benutzername und Repository-Name
-    githubUser: 'YOUR_USERNAME',
+    githubUser: 'fabiofischer-creator',
     githubRepo: 'sailing-tracker',
 
     // Auto-Refresh Intervall für GPS (5 Minuten empfohlen)
@@ -771,6 +805,10 @@ function doGet(e) { return doPost(e); }</code></pre>
       isLoading:     true,
       showSetup:     false,
 
+      // Weather
+      weather:        null,
+      weatherLoading: false,
+
       // GPS data
       track:          [],
       currentPosition: null,
@@ -822,6 +860,9 @@ function doGet(e) { return doPost(e); }</code></pre>
         await this.$nextTick();
         this.initMap();
         this.isLoading = false;
+
+        // Load weather after position is known
+        this.loadWeather();
 
         if (configured) {
           this._pollInterval = setInterval(() => this.loadGPSData(), CONFIG.updateInterval);
@@ -1110,6 +1151,59 @@ function doGet(e) { return doPost(e); }</code></pre>
         } catch (e) {
           this.logEntries = DEMO_LOG;
         }
+      },
+
+      // ---------------------------------------------------
+      // Weather (Open-Meteo — no API key required)
+      async loadWeather() {
+        const pos = this.currentPosition;
+        if (!pos) return;
+        this.weatherLoading = true;
+        try {
+          const [forecast, marine] = await Promise.all([
+            fetch(`https://api.open-meteo.com/v1/forecast?latitude=${pos.lat.toFixed(4)}&longitude=${pos.lng.toFixed(4)}&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code&wind_speed_unit=kn&timezone=UTC`).then(r => r.json()),
+            fetch(`https://marine-api.open-meteo.com/v1/marine?latitude=${pos.lat.toFixed(4)}&longitude=${pos.lng.toFixed(4)}&current=wave_height`).then(r => r.json()),
+          ]);
+          this.weather = {
+            temp:        forecast.current?.temperature_2m?.toFixed(1) ?? '—',
+            windSpeed:   Math.round(forecast.current?.wind_speed_10m ?? 0),
+            windDir:     forecast.current?.wind_direction_10m ?? 0,
+            weatherCode: forecast.current?.weather_code ?? 0,
+            waveHeight:  marine.current?.wave_height?.toFixed(1) ?? '—',
+          };
+        } catch (e) {
+          console.warn('[Weather] Fetch failed:', e.message);
+        } finally {
+          this.weatherLoading = false;
+        }
+      },
+
+      weatherIcon(code) {
+        if (code == null) return '🌤';
+        if (code === 0)              return '☀️';
+        if (code <= 2)               return '⛅';
+        if (code <= 3)               return '☁️';
+        if (code <= 49)              return '🌫';
+        if (code <= 67)              return '🌧';
+        if (code <= 77)              return '🌨';
+        if (code <= 82)              return '🌦';
+        if (code <= 99)              return '⛈';
+        return '🌤';
+      },
+
+      weatherDesc(code) {
+        if (code == null) return '—';
+        if (code === 0)              return 'Klarer Himmel';
+        if (code === 1)              return 'Überwiegend klar';
+        if (code === 2)              return 'Teils bewölkt';
+        if (code === 3)              return 'Bedeckt';
+        if (code <= 49)              return 'Nebel';
+        if (code <= 55)              return 'Nieselregen';
+        if (code <= 67)              return 'Regen';
+        if (code <= 77)              return 'Schnee';
+        if (code <= 82)              return 'Schauer';
+        if (code <= 99)              return 'Gewitter';
+        return '—';
       },
 
       // ---------------------------------------------------
